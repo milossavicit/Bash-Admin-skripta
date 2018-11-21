@@ -1,0 +1,355 @@
+#!/bin/bash
+
+# Pauza-Čekanje na enter dugme
+function pauza(){
+local poruka="$@"
+[ -z $poruka ] && poruka="Pritisnite [Enter] kako biste nastavili..."
+read -p "$poruka" readEnterKey
+}
+
+# Prikaz menija
+function Prikaz_menija(){
+date
+echo "---------------------------"
+echo "           Meni"
+echo "---------------------------"
+echo "1. Informacije o operativnom sistemu"
+echo "2. Hostname i DNS informacije"
+echo "3. Aktivni korisnici"
+echo "4. Vremenska lista ulogovanih korisnika"
+echo "5. Prostor diska"
+echo "6. Rad sa nalozima"
+echo "7. Rad sa fajlovima"
+echo "8. Izlaz"
+}
+
+# Prikaz naslova
+function Heder(){
+local h="$@"
+echo "---------------------------------------------------------------"
+echo " ${h}"
+echo "---------------------------------------------------------------"
+}
+
+# Informacije o operativnom sistemu
+function OS(){
+Heder " Informacije o sistemu "
+echo "Operativni sistem: $(uname)"
+lsb_release -a
+pauza
+}
+
+# Informacije o hostu
+function Host(){
+local dnsip=$(sed -e '/^$/d' /etc/resolv.conf | awk '{if (tolower($1)=="nameserver") print $2}')
+Heder " Hostname i DNS informacije "
+echo "Hostname: $(hostname -s)"
+echo "IP adresa: $(hostname -i)"
+echo "DNS ime servera (DNS IP) : ${dnsip}"
+pauza
+}
+
+# Informacije o trenutno ulogovanim korisnicima i vremensa lista
+function Korisnici_info(){
+local odabir="$1"
+case "$odabir" in
+who) Heder " Ko je ulogovan "; who -H; pauza ;;
+last) Heder " Lista korisnika koji su se ulogovali "; last ; pauza ;;
+esac
+}
+
+# Informacije o iskorišćenosti diska
+function Prostor_diska() {
+upotrebljeno=$(echo $output | awk '{ print $1}' | cut -d'%' -f1)
+particija=$(echo $output | awk '{print $2}')
+Heder " Informacije o iskorišćenosti diska"
+if [ "$EXCLUDE_LIST" != "" ] ; then
+  df -H | grep -vE "^Filesystem|tmpfs|cdrom|${EXCLUDE_LIST}" | awk '{print $5 " " $6}'
+else
+  df -H | grep -vE "^Filesystem|tmpfs|cdrom" | awk '{print $5 " " $6}'
+fi
+pauza
+}
+
+function Rad_sa_nalozima() {
+
+Heder "Rad sa fajlovima"
+
+crvena=$(tput setaf 1)
+zelena=$(tput setaf 2)
+ljubicasta=$(tput setaf 5)
+cian=$(tput setaf 6)
+prekid_boje=$(tput sgr0)
+Kolone=$(tput cols)
+
+centriraj() {
+	w=$(( $Kolone / 2 - 20 ))
+	while I= read -r line
+	do
+		printf "%${w}s %s\n" ' ' "$line"
+	done
+}
+
+centriraj_siroko() {
+	w=$(( $Kolone / 2 - 30 ))
+	while I= read -r line
+	do
+		printf "%${w}s %s\n" ' ' "$line"
+	done
+}
+
+while :
+do
+
+clear
+
+echo ""
+echo ""
+echo "${cian}(unesite broj operacije za izvršavanje)${prekid_boje}" | centriraj_siroko
+echo ""
+echo "1.  Kreiraj novog korisnika" | centriraj
+echo "2.  Promena grupe" | centriraj
+echo "3.  Kreiraj novu grupu" | centriraj
+echo "4.  Obriši korisnika" | centriraj
+echo "5.  Promeni lozinku" | centriraj
+echo "6.  ${ljubicasta}Izlaz${prekid_boje}" | centriraj
+echo ""
+
+read izbor
+case $izbor in
+
+1 )
+	clear && echo "" && echo "Unesite novi username:  ${cian}(BEZ RAZMAKA ILI SPECIJALNIH KARAKTERA!)${prekid_boje}" | centriraj_siroko && echo ""
+	read noviusername
+	echo "" && echo ""
+	sudo adduser $noviusername  && echo "${zelena}Novi korisnik $noviusername je uspešno kreiran.${prekid_boje}" | centriraj || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj
+	read
+;;
+
+2 )
+	clear && echo "" && echo "Kojeg korisnika želite da stavite u drugu grupu? ${cian}(KORISNIK MORA POSTOJATI!)${prekid_boje}" | centriraj_siroko && echo ""
+	read korisnik
+	echo "" && echo "Unesite novu grupu za korisnika:  ${cian}(BEZ RAZMAKA ILI SPECIJALNIH KARAKTERA!)${prekid_boje}" | centriraj_siroko && echo ""
+	read grupa
+	echo "" && echo ""
+	sudo groupadd $grupa
+	sudo usermod -g $grupa $korisnik && echo "${zelena}Korisnik $korisnik je uspešno dodat u grupu $grupa .${prekid_boje}" | centriraj || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj_siroko
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.}" | centriraj
+	read
+;;
+
+3 )
+	clear && echo "" && echo "Unesite naziv nove grupe:  ${cian}(BEZ RAZMAKA ILI SPECIJALNIH KARAKTERA!)${prekid_boje}" | centriraj_siroko && echo ""
+	read novagrupa
+	echo "" && echo ""
+	sudo groupadd $novagrupa && echo "${zelena}Grupa $novagrupa je uspešno kreirana.${prekid_boje}" | centriraj || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj_siroko
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.}" | centriraj
+	read
+;;
+
+4 )
+	clear && echo "" && echo "Unesite korisnika za brisanje:  ${cian}(KORISNIK NE MOŽE BITI VRAĆEN)${prekid_boje}" | centriraj_siroko && echo ""
+	read obrisikorisnika
+	echo "" && echo "${crvena}DA LI STE SIGURNI DA ŽELITE DA OBRIŠETE OVOG KORISNIKA? ${cian}y/n${prekid_boje}" | centriraj_siroko
+	read del_izbor
+	echo "" && echo ""
+	case $del_izbor in
+		y | Y )
+			sudo userdel $obrisikorisnika && echo "${zelena}Korisnik $obrisikorisnika je uspešno obrisan." | centriraj || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj_siroko
+		;;
+		n | N )
+			echo "Korisnik nije obrisan." | centriraj
+		;;
+		* )
+			echo "${crvena}Morate odabrati validnu opciju!${prekid_boje}" | centriraj
+		;;
+	esac
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj
+	read
+;;
+
+5 )
+	clear && echo "" && echo "Kom korisniku želite da promenite lozinku?" | centriraj_siroko
+	read lozinka
+	echo ""
+	sudo passwd $lozinka && echo "${zelena}Lozinka korisnika $lozinka je uspešno promenjena.${prekid_boje}" | centriraj || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj
+	read
+;;
+
+6 )
+	clear && echo "" && echo "Da li ste sigurni da želite da izađete? ${cian}y/n${prekid_boje}" | centriraj_siroko && echo ""
+	read izlaz_izbor
+	case $izlaz_izbor in
+		y | Y )
+			clear && exit
+		;;
+		n | N )
+			clear && echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+		;;
+		* )
+			clear && echo "" && echo "${crvena}Unos mora biti validan!${prekid_boje}" | centriraj && echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+		;;
+	esac
+;;
+
+esac
+
+done
+pauza
+}
+
+function Rad_sa_fajlovima() {
+Heder "Rad sa fajlovima"
+crvena=$(tput setaf 1)
+zelena=$(tput setaf 2)
+ljubicasta=$(tput setaf 5)
+cian=$(tput setaf 6)
+prekid_boje=$(tput sgr0)
+Kolone=$(tput cols)
+
+centriraj() {
+	w=$(( $Kolone / 2 - 20 ))
+	while I= read -r line
+	do
+		printf "%${w}s %s\n" ' ' "$line"
+	done
+}
+
+centriraj_siroko() {
+	w=$(( $Kolone / 2 - 30 ))
+	while I= read -r line
+	do
+		printf "%${w}s %s\n" ' ' "$line"
+	done
+}
+
+while :
+do
+
+clear
+
+echo ""
+echo ""
+echo "${cian}(unesite broj operacije za izvršavanje)${prekid_boje}" | centriraj_siroko
+echo ""
+echo "1.  Kreiraj fajl" | centriraj
+echo "2.  Obriši fajl" | centriraj
+echo "3.  Kreiraj direktorijum" | centriraj
+echo "4.  Obriši direktorijum" | centriraj
+echo "5.  Promeni dozvolu pristupa fajlu" | centriraj
+echo "6.  Tekst editor" | centriraj
+echo "7.  ${ljubicasta}Izlaz${prekid_boje}" | centriraj
+echo ""
+
+read izbor_menija
+case $izbor_menija in
+
+1 )
+	clear && echo "" && echo "Trenutni direktorijum:" | centriraj && pwd | centriraj
+	echo "" && echo "Unesite ${cian}punu putanju${prekid_boje} i naziv fajla:" | centriraj_siroko && echo ""
+	read fajl
+	echo "" && echo ""
+	touch $fajl && echo "${zelena}Fajl $fajl je uspešno kreiran.${prekid_boje}" | centriraj_siroko || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+;;
+
+2 )
+	clear && echo "" && echo "Trenutni direktorijum:" | centriraj && pwd | centriraj && echo "" && ls && echo ""
+	echo "Unesite ${cian}punu putanju${prekid_boje} i naziv fajla za brisanje:" | centriraj_siroko && echo ""
+	read fajl_brisanje
+	echo "" && echo ""
+	rm -f $fajl_brisanje && echo "${zelena}Fajl je uspešno obrisan.${prekid_boje}" | centriraj || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+;;
+
+3 )
+	clear && echo "" && echo "Trenutni direktorijum:" | centriraj && pwd | centriraj && echo "" && ls && echo ""
+	echo "Unesite ${cian}punu putanju${prekid_boje} gde će direktorijum biti kreiran:" | centriraj_siroko && echo ""
+	read direktorijum
+	echo "" && echo ""
+	mkdir $direktorijum&& echo "${zelena}Direktorijum $direktorijum je uspešno kreiran.${prekid_boje}" | centriraj_siroko || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+;;
+
+4 )
+	clear && echo "" && echo "Trenutni direktorijum:" | centriraj && pwd | centriraj && echo "" && ls && echo ""
+	echo "Unesite ${cian}punu putanju${prekid_boje} direktorijuma za brisanje:  ${cian}(MORA BITI PRAZAN!)${prekid_boje}" | centriraj_siroko && echo ""
+	read dir_brisanje
+	echo "" && echo ""
+	rmdir $dir_brisanje && echo "${zelena}Direktorijum $dir_brisanje je uspešno obrisan.${prekid_boje}" | centriraj_siroko || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj_siroko
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+;;
+
+5 )
+	clear && echo "" && echo "Unesite fajl za promenu dozvole pristupa:  ${cian}(PUNA PUTANJA!)${prekid_boje}" | centriraj_siroko && echo ""
+	read chmodfajl
+	echo "" && echo "Unesite trocifren broj za dozvolu koju želite da postavite:" | centriraj_siroko
+	echo ""
+	echo "${cian}( Format je [owner][group][all]  |  Primer: ${prekid_boje}777${cian} za potpunu kontrolu svim korisnicima. )${prekid_boje}" | centriraj_siroko
+	echo ""
+	echo "${cian}4 = read${prekid_boje}" | centriraj
+	echo "${cian}2 = write${prekid_boje}" | centriraj
+	echo "${cian}1 = execute${prekid_boje}" | centriraj
+	echo ""
+	read chmodbroj
+	echo "" && echo ""
+	chmod $chmodbroj $chmodfajl && echo "${zelena}Permissions for $chmodfajl changed successfully.${prekid_boje}" | centriraj_siroko || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+;;
+
+6 )
+	clear && echo "" && echo "Unesite punu putanju fajla koji želite da editujete:" | centriraj_siroko && echo ""
+	read edit_fajl
+	nano $edit_fajl || echo "${crvena}Došlo je do greške.${prekid_boje}" | centriraj_siroko
+	echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+;;
+
+7 )
+	clear && echo "" && echo "Da li ste sigurni da želite da izađete? ${cian}y/n${prekid_boje}" | centriraj_siroko && echo ""
+	read izlaz_izbor
+	case $izlaz_izbor in
+		y | Y )
+			clear && exit
+		;;
+		n | N )
+			clear && echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+		;;
+		* )
+			clear && echo "" && echo "${crvena}Unos mora biti validan!${prekid_boje}" | centriraj && echo "" && echo "${cian}(Pritisnite ENTER da nastavite.)${prekid_boje}" | centriraj && read
+		;;
+	esac
+;;
+
+esac
+
+done
+pauza
+}
+
+#Čita unos i pokreće funkciju
+function Citanje_ulaza(){
+local c
+read -p "Unesite izbor [ 1 -8 ] " c
+case $c in
+1) OS ;;
+2) Host ;;
+3) Korisnici_info "who" ;;
+4) Korisnici_info "last" ;;
+5) Prostor_diska ;;
+6) Rad_sa_nalozima ;;
+7) Rad_sa_fajlovima ;;
+8) exit 0 ;;
+*) echo "Morate odabrati od 1-8."
+pauza
+esac
+}
+
+# Main
+while true
+do
+clear
+Prikaz_menija
+Citanje_ulaza
+done
